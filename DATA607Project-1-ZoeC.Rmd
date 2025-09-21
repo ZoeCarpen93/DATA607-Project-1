@@ -1,0 +1,134 @@
+---
+title: "DATA607Project-1-ZoeC"
+author: "Zoe Carpentieri"
+date: "09.18.2025"
+output: html_document
+---
+
+# Introduction
+
+For this assignment, we were tasked with parsing a .txt file that was not a straight up table. This posed some challenges. The below steps outline how I created a .csv file containing: Player’s Name, Player’s State, Total Number of Points, Player’s Pre-Rating, and Average Pre Chess Rating of Opponents as columns from the file provided.  
+
+---
+
+# Step 1: Load packages and read lines
+
+These are the packages I loaded and asked R to read the lines
+
+```{r load-data, message=FALSE, warning=FALSE}
+library(dplyr)
+library(stringr)
+library(purrr)
+library(tidyr)
+library(readr)
+
+lines <- readLines("C:/MSinDSSemester1/DATA607-Projects/Project-1/data/tournamentinfo.txt")
+
+```
+
+# Step 2: Cleanup
+
+Next, I specified which lines I wanted to drop and stored those parameters in the "drop" variable. Then I negated those parameters and created the clean_lines variable out of that. I also added a "stopifnot" to prevent the program from running if clean_lines doesn't exist. 
+
+Since each player's information is really stored on two lines, we have to have a system to deal with that. I created a pattern to identify each top row, and I stored it in top_idx so that we can identify the first row of each players info. I then assigned variables row1 and row2 in order to pick out each row.
+
+```{r clean lines}
+drop <- str_detect(lines, r"(^\s*$)") |          
+  str_detect(lines, r"(^-{2,}$)") |       
+  str_detect(lines, r"(^\s*Pair\s*\|)")   
+
+drop[is.na(drop)] <- FALSE
+
+clean_lines <- lines[!drop]
+stopifnot(exists("clean_lines"), is.character(clean_lines))
+
+top_idx <- which(str_detect(clean_lines, "^\\s*\\d+\\s*\\|"))
+row1 <- clean_lines[top_idx]        
+row2 <- clean_lines[top_idx + 1] 
+head(row1,5)
+head(row2,5)
+
+```
+
+# Step 3: Parse Columns
+
+Next, I needed to parse the columns, so I assigned m1 and m2 to separate the data in between the pipes into 11 different sections, kind of pseudo-columns. The m1 variable took from row1 and m2 from row2. Now we have a clear path to make this into a table that makes sense, organized by player. 
+
+```{r Parse Columns}
+m1 <- str_split(row1, "\\|", simplify = TRUE)
+m2 <- str_split(row2, "\\|", simplify = TRUE)
+head(m1,3)
+head(m2,3)
+```
+
+# Step 4: Create Table
+
+So I went ahead and created a tibble based on my m1 and m2 variables, directing them to the index of the column I wish to assign to each column header. 
+
+```{r create table}
+player_info <- tibble(
+  Player_Num = as.integer(str_squish(m1[, 1])),
+  Name       = str_squish(m1[, 2]),
+  TotalPts   = as.numeric(str_squish(m1[, 3])),
+  State      = str_squish(m2[, 2]),
+  PreRating  = as.integer(str_match(row2, "R:\\s*(\\d+)")[, 2]),
+)
+head(player_info,5)
+```
+
+# Step 5: Average Rating of Opponents
+
+There were a few matrices and vectors I created to accomplish this. First, I created opp_matx which isolated the columns containing the opponent data by player.
+
+```{r avg ratings of opps}
+opp_matx <- m1[, 4:10, drop = FALSE]
+head(opp_matx, 2)
+```
+
+But as you can see, it still has the letter attached indicating the outcome of the game. To address this, I created m, that just extracts the numerals from each cell by identifying whether they're after a "W" "D" or "L", all other letters don't have numerals after them, so I set them as N/As. Then I created the opp_ids matrix to put it back into the right shape.
+
+```{r}
+m <- stringr::str_match(as.vector(opp_matx), "[WLD]\\s*(\\d+)")
+
+opp_ids <- matrix(
+  as.integer(m[, 2]),
+  nrow = nrow(opp_matx),
+  ncol = ncol(opp_matx)
+)
+head(opp_ids, 5)
+```
+
+Now that we have the opponent IDs isolated, we can grab their pre-ratings. I created a vector called pre_lookup (cause it sounds like V-lookup, which I'm very familiar with) to identify the preratings with each plater ID. I then created a ratings vector and matrix. 
+
+```{r}
+pre_lookup <- stats::setNames(player_info$PreRating, player_info$Player_Num)
+
+ratings_vec <- unname(pre_lookup[as.character(opp_ids)])
+ratings_mat <- matrix(ratings_vec, nrow = nrow(opp_matx), ncol = ncol(opp_matx))
+head(ratings_mat, 5)
+```
+
+I created an Average column in the ratings matrix, took care of the NAs and rounded
+
+```{r}
+AvgOppPre <- rowMeans(ratings_mat, na.rm = TRUE)
+AvgOppPre <- ifelse(is.nan(AvgOppPre), NA_real_, AvgOppPre)  # convert NaN (all-NA rows) to NA
+AvgOppPre <- round(AvgOppPre)
+```
+
+And then added it to the player_info data frame
+
+```{r}
+stopifnot(nrow(player_info) == nrow(ratings_mat))
+player_info <- player_info %>%
+  dplyr::mutate(AvgOppPre = AvgOppPre) %>%
+  dplyr::select(Name, State, TotalPts, PreRating, AvgOppPre)
+head(player_info, 5)
+```
+
+I then wrote the player_info data frame as a csv file in the same folder. 
+```{r}
+readr::write_csv(player_info, "C:/MSinDSSemester1/DATA607-Projects/Project-1/tournament_players.csv")
+```
+
+It took a lot of trial and error, and I probably am not doing this in the most efficient way possible, but I got there! Excited to see feedback on this one. Thanks!
