@@ -4,7 +4,8 @@ library(purrr)
 library(tidyr)
 library(readr)
 
-lines <- readLines(file.path("data", "tournamentinfo.txt"))
+lines <- readLines("C:/MSinDSSemester1/DATA607-Projects/Project-1/data/tournamentinfo.txt")
+
 
 drop <- str_detect(lines, r"(^\s*$)") |          
   str_detect(lines, r"(^-{2,}$)") |       
@@ -65,5 +66,9 @@ player_info <- player_info %>%
   dplyr::mutate(AvgOppPre = AvgOppPre) %>%
   dplyr::select(Name, State, TotalPts, PreRating, AvgOppPre)
 
-readr::write_csv(player_info, file.path("outputs", "tournament_players.csv"))
+readr::write_csv(player_info, file.path("C:/MSinDSSemester1/DATA607-Projects/Project-1/outputs/tournament_players.csv")
+                 
+
+
+
 
